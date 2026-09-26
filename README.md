@@ -1,112 +1,704 @@
 # 🏥 medvision
 
-**A modular Python library for detecting and correcting medical image artifacts — before they reach your model.**
+### Medical Image Quality & Artifact Processing Library
 
-Built on [MONAI](https://monai.io/) and [OpenCV](https://opencv.org/), `medvision` targets the artifacts that quietly degrade medical imaging pipelines: **noise, bias field, poor contrast, and motion**. Instead of discovering these problems after a model underperforms, `medvision` detects and corrects them as an explicit preprocessing stage, with every step measurable and reproducible.
+**Detect. Understand. Correct. Before Your Model Sees the Image.**
 
----
+`medvision` is a modular Python library for **detecting and correcting common medical image artifacts before they affect downstream AI and computer vision models**.
 
-## Why medvision
+It provides a structured preprocessing layer for medical imaging pipelines, targeting artifacts such as:
 
-Medical imaging datasets are rarely clean. Scanner noise, intensity inhomogeneity (bias field), inconsistent contrast, and patient motion are common — and most computer vision pipelines either ignore them or handle them with ad-hoc scripts that aren't reusable, testable, or explainable.
+- 🟡 Noise
+- 🟠 Bias field / intensity inhomogeneity
+- 🔵 Poor contrast
+- 🔴 Motion artifacts
 
-`medvision` treats artifact handling as a first-class engineering problem:
-
-- **Detect before you correct.** Every artifact type has a dedicated detector that reports *what* it found and *how confident* it is — nothing is corrected blindly.
-- **Every step is inspectable.** Detection and correction results are structured objects, not side effects, so you always know what changed and why.
-- **Format-agnostic by design.** DICOM, NIfTI, PNG, and JPG are all normalized into the same internal representation before any processing happens.
-- **Built to be extended.** New artifact types, new file formats, or new correction algorithms plug into fixed interfaces without touching the rest of the codebase.
+Instead of relying on scattered preprocessing scripts, `medvision` turns artifact handling into a **reproducible, measurable, and extensible engineering stage**.
 
 ---
 
-## How it works
+## 🎯 Why medvision?
 
-`medvision` moves an image through four stages, all speaking the same data language:
+Medical imaging data is rarely perfect.
 
+Scanner noise, intensity inhomogeneity, inconsistent contrast, and patient motion can affect image quality and potentially influence downstream model performance.
+
+A common approach is to build ad-hoc preprocessing scripts around individual projects:
+
+```text
+Medical Image
+     ↓
+  Custom Script
+     ↓
+  More Scripts
+     ↓
+  ML Model
+     ↓
+Unexpected Results
 ```
-   Loader              Detector             Corrector             Writer
-(any format)  ───▶  (per artifact)  ───▶  (per artifact)  ───▶  (any format)
-     │                    │                     │                    │
-     ▼                    ▼                     ▼                    ▼
-MedicalImage      DetectionResult      CorrectionResult        MedicalImage
+
+This quickly becomes difficult to maintain, reproduce, test, and extend.
+
+`medvision` treats image-quality processing as a **first-class engineering layer**:
+
+```text
+Medical Image
+      │
+      ▼
+    Load
+      │
+      ▼
+   Detect
+      │
+      ▼
+  Diagnose
+      │
+      ▼
+   Correct
+      │
+      ▼
+   Validate
+      │
+      ▼
+    Write
+      │
+      ▼
+Downstream AI Model
 ```
 
-- **`MedicalImage`** is the single unit of data used everywhere in the library — the pixel/voxel array plus whatever spatial metadata the source format provides (affine, header, etc.). No module ever passes around a bare array.
-- **`DetectionResult`** is what a detector returns: whether an artifact was found, how confident the detector is, and an optional raw score. Detectors only *report* — they never modify the image.
-- **`CorrectionResult`** is what a corrector returns: a new `MedicalImage` plus whether anything actually changed. Correctors never mutate the input in place.
-- **`PipelineResult`** ties a full run together — the original image, the final image, and every detection and correction that happened along the way.
-
-Full details on these contracts, and the rules every module must follow, live in [`core-architecture.md`](./core-architecture.md) — required reading before contributing a loader, detector, or corrector.
-
-Because every module speaks through these same contracts, any loader, detector, or corrector can be swapped, added, or removed without breaking the rest of the pipeline.
+> **The goal is simple: make medical image preprocessing explicit, measurable, reusable, and reproducible.**
 
 ---
 
-## Project structure
+## ✨ Core Features
 
+### 🔍 Artifact Detection
+
+Each artifact type has a dedicated detector responsible for identifying whether the artifact is present.
+
+A detector can report:
+
+- Whether an artifact was detected
+- Detection confidence
+- Raw detection score
+- Additional diagnostic information when available
+
+**Detectors report — they never modify the image.**
+
+---
+
+### 🛠️ Artifact Correction
+
+When an artifact is detected, the corresponding corrector can process the image.
+
+Correctors:
+
+- Receive a `MedicalImage`
+- Apply a specific correction algorithm
+- Return a new `MedicalImage`
+- Report whether a correction was actually applied
+
+The original image is not silently mutated.
+
+---
+
+### 📦 Format-Agnostic I/O
+
+Different file formats should not force the rest of the pipeline to behave differently.
+
+`medvision` normalizes supported formats into a common internal representation:
+
+| Format | Support |
+|---|---:|
+| PNG | ✅ |
+| JPG / JPEG | ✅ |
+| NIfTI | ✅ |
+| DICOM | ✅ |
+
+```text
+PNG ─────┐
+JPG ─────┤
+NIfTI ───┼──▶ MedicalImage ──▶ Processing ──▶ Output
+DICOM ───┘
 ```
+
+Spatial metadata such as affine information and format-specific headers can be preserved where applicable.
+
+---
+
+### 🔄 Batch Processing
+
+Process individual images or entire directories through the same I/O layer.
+
+```python
+from medvision.io import IOPipeline
+
+pipeline = IOPipeline()
+
+images, report = pipeline.load("data/raw/")
+
+print(report.summary())
+
+for err in report.errors:
+    print("LOAD FAIL:", err.path, err.error_type, err.error)
+```
+
+Batch writing supports both a default output format and automatic format preservation.
+
+```python
+written, report = pipeline.write_batch(
+    images,
+    output_dir="data/processed/",
+    filename_pattern="scan_{index:04d}{ext}",
+    extension_mode="default",
+    default_extension=".nii.gz",
+)
+
+print(report.summary())
+```
+
+Or preserve each image's original format:
+
+```python
+written_auto, report_auto = pipeline.write_batch(
+    images,
+    output_dir="data/processed_auto/",
+    filename_pattern="scan_{index:04d}{ext}",
+    extension_mode="auto",
+)
+
+print(report_auto.summary())
+```
+
+---
+
+## 🧠 Architecture
+
+`medvision` is built around a small set of explicit data contracts.
+
+```text
+┌──────────────┐
+│    Loader    │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────────┐
+│   MedicalImage   │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│     Detector     │
+│                  │
+│  noise           │
+│  bias field      │
+│  contrast        │
+│  motion          │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ DetectionResult  │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│    Corrector     │
+│                  │
+│  noise           │
+│  bias field      │
+│  contrast        │
+│  motion          │
+└────────┬─────────┘
+         │
+         ▼
+┌───────────────────┐
+│ CorrectionResult  │
+└─────────┬─────────┘
+          │
+          ▼
+┌──────────────────┐
+│      Writer      │
+└──────────────────┘
+```
+
+### `MedicalImage`
+
+The central data object used throughout the library.
+
+It represents:
+
+- Image pixel / voxel data
+- Source format
+- Spatial metadata
+- Affine information when available
+- Format-specific metadata such as headers
+
+No module needs to pass around a bare NumPy array.
+
+---
+
+### `DetectionResult`
+
+Represents the output of an artifact detector.
+
+It answers questions such as:
+
+```text
+Was an artifact detected?
+How confident are we?
+What was the raw detection score?
+```
+
+A detector reports findings without modifying the input image.
+
+---
+
+### `CorrectionResult`
+
+Represents the result of an artifact correction.
+
+It contains:
+
+- The resulting `MedicalImage`
+- Whether a correction was applied
+- Correction-related information
+
+Correctors return a new image instead of silently mutating their input.
+
+---
+
+### `PipelineResult`
+
+Connects the complete processing lifecycle.
+
+Conceptually:
+
+```text
+Original Image
+      │
+      ├── Detection Results
+      │
+      ├── Correction Results
+      │
+      ▼
+Final Image
+```
+
+This makes the processing history explicit and inspectable.
+
+---
+
+## 🏗️ Project Structure
+
+```text
 medvision/
-├── core/            # Shared data contracts (MedicalImage, DetectionResult, CorrectionResult, PipelineResult)
+│
+├── core/
+│   ├── medical_image.py
+│   ├── detection_result.py
+│   ├── correction_result.py
+│   └── pipeline_result.py
+│
 ├── io/
-│   ├── loaders/     # Format-specific loaders (PNG, JPG, DICOM, NIfTI) behind a common factory
-│   └── writers/     # Format-specific writers, mirroring the loaders
-├── detectors/       # One detector per artifact type (noise, bias_field, contrast, motion)
-├── correctors/      # One corrector per artifact type
-├── utils/           # Metrics and visualization helpers
-├── exceptions/      # Library-specific exception types
-└── pipeline.py      # Orchestration layer: wires loaders → detectors → correctors → writers
+│   ├── loaders/
+│   │   ├── png.py
+│   │   ├── jpg.py
+│   │   ├── nifti.py
+│   │   └── dicom.py
+│   │
+│   └── writers/
+│       ├── png.py
+│       ├── jpg.py
+│       ├── nifti.py
+│       └── dicom.py
+│
+├── detectors/
+│   ├── base.py
+│   ├── noise.py
+│   ├── bias_field.py
+│   ├── contrast.py
+│   └── motion.py
+│
+├── correctors/
+│   ├── base.py
+│   ├── noise.py
+│   ├── bias_field.py
+│   ├── contrast.py
+│   └── motion.py
+│
+├── utils/
+│   ├── metrics.py
+│   └── visualization.py
+│
+├── exceptions/
+│   └── ...
+│
+└── pipeline.py
 ```
 
-Every detector implements a common `BaseDetector.detect()` interface; every corrector implements a common `BaseCorrector.correct()` interface. This is what lets `pipeline.py` treat all artifact types uniformly, regardless of the algorithm behind each one.
+The exact implementation may evolve, but the architectural boundary remains:
+
+```text
+I/O → Core Contracts → Detection → Correction → I/O
+```
 
 ---
 
-## Status
+## 🔌 Extensible by Design
 
-`medvision` is under active development. The architecture and data contracts are fixed; individual components are being implemented incrementally, one module at a time, against the contracts above. Check the source directly for the current state of any given loader, detector, or corrector — this README describes the design, not a snapshot of what's finished.
+Adding a new artifact should not require rewriting the pipeline.
+
+Detectors follow a common interface:
+
+```python
+class BaseDetector:
+    def detect(self, image):
+        ...
+```
+
+Correctors follow a common interface:
+
+```python
+class BaseCorrector:
+    def correct(self, image):
+        ...
+```
+
+This allows the orchestration layer to work with different algorithms through stable interfaces.
+
+For example:
+
+```text
+BaseDetector
+     │
+     ├── NoiseDetector
+     ├── BiasFieldDetector
+     ├── ContrastDetector
+     └── MotionDetector
+```
+
+and:
+
+```text
+BaseCorrector
+     │
+     ├── NoiseCorrector
+     ├── BiasFieldCorrector
+     ├── ContrastCorrector
+     └── MotionCorrector
+```
+
+A new artifact can therefore be introduced without coupling it to the rest of the system.
 
 ---
 
-## Installation
+# 🚀 Usage
 
-`medvision` isn't published as a package yet. Until then, install directly from source:
+### Load Images
+
+```python
+from medvision.io import IOPipeline
+
+pipeline = IOPipeline()
+
+images, load_report = pipeline.load("data/raw/")
+
+print(load_report.summary())
+
+for err in load_report.errors:
+    print("LOAD FAIL:", err.path, err.error_type, err.error)
+```
+
+### Write All Images as NIfTI
+
+```python
+written, write_report = pipeline.write_batch(
+    images,
+    output_dir="data/processed/",
+    filename_pattern="scan_{index:04d}{ext}",
+    extension_mode="default",
+    default_extension=".nii.gz",
+)
+
+print(write_report.summary())
+```
+
+### Preserve the Original Format
+
+```python
+written_auto, report_auto = pipeline.write_batch(
+    images,
+    output_dir="data/processed_auto/",
+    filename_pattern="scan_{index:04d}{ext}",
+    extension_mode="auto",
+)
+
+print(report_auto.summary())
+```
+
+### Verify an Output
+
+```python
+check, check_report = pipeline.load(written[0])
+
+print(check_report.summary())
+```
+
+---
+
+## 🔬 Intended Workflow
+
+The long-term workflow is designed around a simple principle:
+
+> **Do not correct an artifact just because a correction algorithm exists. Detect it first.**
+
+A typical pipeline can therefore look like:
+
+```text
+             ┌───────────────┐
+             │ Medical Image │
+             └───────┬───────┘
+                     │
+                     ▼
+              ┌────────────┐
+              │   Detect   │
+              └─────┬──────┘
+                    │
+          ┌─────────┴─────────┐
+          │                   │
+       No Artifact         Detected
+          │                   │
+          │                   ▼
+          │             ┌───────────┐
+          │             │  Correct  │
+          │             └─────┬─────┘
+          │                   │
+          └─────────┬─────────┘
+                    ▼
+              ┌───────────┐
+              │  Validate │
+              └─────┬─────┘
+                    │
+                    ▼
+              ┌───────────┐
+              │   Write   │
+              └─────┬─────┘
+                    │
+                    ▼
+              Clean Dataset
+                    │
+                    ▼
+              AI / ML Model
+```
+
+This separation makes it possible to evaluate each stage independently.
+
+---
+
+## 🧪 Design Principles
+
+`medvision` is built around several engineering principles:
+
+### 1. Detection before correction
+
+No correction should be applied blindly.
+
+### 2. Explicit data contracts
+
+Every major stage communicates through defined objects rather than loosely structured dictionaries or raw arrays.
+
+### 3. No hidden mutation
+
+Processing should be predictable and reproducible.
+
+### 4. Separation of concerns
+
+I/O, detection, correction, orchestration, and utilities remain separate responsibilities.
+
+### 5. Reproducibility
+
+The same input and processing configuration should produce a traceable result.
+
+### 6. Extensibility
+
+New formats, detectors, and correction algorithms should integrate through stable interfaces.
+
+### 7. Production-oriented engineering
+
+The project is designed with error reporting, batch processing, validation, and maintainability in mind rather than only notebook-based experimentation.
+
+---
+
+## 📊 Current Artifact Roadmap
+
+| Artifact | Detection | Correction | Status |
+|---|:---:|:---:|---|
+| Noise | 🚧 | 🚧 | In development |
+| Bias Field | 🚧 | 🚧 | In development |
+| Contrast | 🚧 | 🚧 | In development |
+| Motion | 🚧 | 🚧 | In development |
+
+> The repository is under active development. Check the source code for the current implementation status of each component.
+
+---
+
+## 🧰 Tech Stack
+
+- **Python**
+- **MONAI** — medical imaging and deep learning ecosystem
+- **OpenCV** — image processing
+- **NumPy** — numerical computing
+- **SciPy** — scientific computing
+- **scikit-image** — image processing
+- **NiBabel** — NIfTI and neuroimaging formats
+- **pydicom** — DICOM
+- **Pillow** — PNG/JPG image handling
+- **Pydantic** — structured data validation
+
+---
+
+## 📦 Installation
+
+`medvision` is currently developed directly from source and is not yet published as a PyPI package.
 
 ```bash
 git clone https://github.com/HosseinHeydari2004/medvision.git
 cd medvision
+
 pip install -r requirements.txt
 ```
 
-## Usage
+---
 
-```python
-from medvision.io import LoaderFactory
+## 🗺️ Roadmap
 
-image = loader.load("scan.png")
+The project is being developed incrementally around the core architecture.
 
-print(image.data.shape, image.format)
+### I/O
+
+- [x] Unified image representation
+- [x] PNG loading
+- [x] JPG/JPEG loading
+- [x] NIfTI loading
+- [x] DICOM loading
+- [x] Batch loading
+- [x] Batch writing
+- [x] Output extension control
+- [x] Format-preserving output mode
+
+### Artifact Detection
+
+- [ ] Noise detection
+- [ ] Bias-field detection
+- [ ] Contrast detection
+- [ ] Motion detection
+
+### Artifact Correction
+
+- [ ] Noise correction
+- [ ] Bias-field correction
+- [ ] Contrast correction
+- [ ] Motion correction
+
+### Pipeline
+
+- [ ] End-to-end artifact pipeline
+- [ ] Configurable processing stages
+- [ ] Structured pipeline reports
+- [ ] Processing metrics
+- [ ] Visualization utilities
+
+### Quality & Engineering
+
+- [ ] Expanded unit test coverage
+- [ ] Integration tests
+- [ ] Benchmark datasets
+- [ ] Documentation
+- [ ] CI/CD
+- [ ] Package release
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome.
+
+Before adding or modifying a loader, detector, corrector, or core contract:
+
+1. Read [`core-architecture.md`](./core-architecture.md).
+2. Follow the existing interfaces.
+3. Use the relevant base class instead of introducing a parallel interface.
+4. Keep responsibilities separated.
+5. Add tests for new behavior.
+6. Avoid changing core data contracts without first discussing the architectural impact.
+
+The most important contracts are:
+
+```text
+MedicalImage
+DetectionResult
+CorrectionResult
+PipelineResult
 ```
 
-As detectors, correctors, and the pipeline are implemented, this section will grow into a full detect → correct → write workflow example.
+Changes to these objects can affect the entire processing pipeline.
 
 ---
 
-## Contributing
+## 📚 Architecture Documentation
 
-Before opening a PR that adds or modifies a loader, detector, or corrector:
+For a deeper explanation of the architecture, contracts, and implementation rules, see:
 
-1. Read [`core-architecture.md`](./core-architecture.md) — it defines the contracts every module must follow.
-2. Implement against the relevant base class (`BaseDetector`, `BaseCorrector`, `BaseLoader`) rather than inventing a new interface.
-3. Don't change the shape of `MedicalImage`, `DetectionResult`, `CorrectionResult`, or `PipelineResult` without proposing it first — the rest of the pipeline depends on their current shape.
+**[`core-architecture.md`](./core-architecture.md)**
 
-## Tech stack
-
-Python · [MONAI](https://monai.io/) · [OpenCV](https://opencv.org/) · NumPy · SciPy · scikit-image · NiBabel · pydicom · Pillow · Pydantic
-
-## License
-
-Not yet specified — check the repository for the current license before use.
+This document is the starting point for contributors working on the core pipeline.
 
 ---
 
-Part of **Versa** — open-source, production-grade AI engineering.
+## 👥 Contributors
+
+`medvision` is developed collaboratively by engineers and researchers working across **AI, medical imaging, computer vision, and software engineering**.
+
+| Contributor | Focus |
+|---|---|
+| **Hossein Heydari** | Architecture · Core Engineering · Medical Imaging Pipeline |
+| **Seyede Reyhane Khorashadizade** | Computer Vision · Image Processing · Deep Learning · Healthcare AI |
+
+### 🔗 Contributors
+
+- **Hossein Heydari** — [GitHub](https://github.com/HosseinHeydari2004)
+- **Seyede Reyhane Khorashadizade** — [GitHub](https://github.com/Seyede-Reyhane-Khorashadizade)
+
+---
+
+## ⚠️ Project Status
+
+`medvision` is an **actively developed open-source engineering project**.
+
+The core architecture and data contracts provide the foundation of the system, while artifact detectors and correction algorithms are being implemented incrementally.
+
+The current repository should therefore be considered a **work in progress**, not a finished clinical or diagnostic product.
+
+`medvision` is intended as an engineering and research tool for medical image preprocessing. It is **not a medical device and should not be used for clinical diagnosis or treatment decisions without appropriate validation, regulatory review, and clinical oversight.**
+
+
+---
+
+## 📄 License
+
+A license has not yet been specified for this repository.
+
+Check the repository for the current licensing status before using or redistributing the project.
+
+---
+
+<div align="center">
+
+### 🏥 medvision
+
+**Clean the image before you blame the model.**
+
+Built for reproducible medical imaging pipelines.
+
+</div>
