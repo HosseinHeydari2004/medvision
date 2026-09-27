@@ -1,5 +1,15 @@
 # 🏥 medvision
 
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![GitHub Stars](https://img.shields.io/github/stars/HosseinHeydari2004/medvision?style=flat&logo=github)](https://github.com/HosseinHeydari2004/medvision/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/HosseinHeydari2004/medvision?style=flat&logo=github)](https://github.com/HosseinHeydari2004/medvision/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/HosseinHeydari2004/medvision?style=flat&logo=git)](https://github.com/HosseinHeydari2004/medvision/commits/main)
+[![Repo Size](https://img.shields.io/github/repo-size/HosseinHeydari2004/medvision?style=flat&logo=github)](https://github.com/HosseinHeydari2004/medvision)
+[![Medical Imaging](https://img.shields.io/badge/Domain-Medical%20Imaging-red)](#)
+[![DICOM](https://img.shields.io/badge/Format-DICOM-orange)](#)
+[![NIfTI](https://img.shields.io/badge/Format-NIfTI-blue)](#)
+[![MONAI](https://img.shields.io/badge/Medical%20AI-MONAI-4B5563)](https://monai.io/)
+
 ### Medical Image Quality & Artifact Processing Library
 
 **Detect. Understand. Correct. Before Your Model Sees the Image.**
